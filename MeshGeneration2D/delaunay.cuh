@@ -527,11 +527,13 @@ __device__ double2 lineLineIntersection(double2 A, double2 B, double2 C, double2
 
 __global__ void NNcrustKernel(int no_of_points, int voronoi_edge_index, double2 voronoiedge_endpoint_a, double2 voronoiedge_endpoint_b)
 {
-	int point_of_interest_idx = threadIdx.x;
 	
+	int point_of_interest_idx = threadIdx.x;
+
 	double2 point_of_interest = gpu_voronoi_thresholdpointsforeachedge[voronoi_edge_index][point_of_interest_idx];
 
-	int neighbors_index[10];
+	int neighbors_index[30];
+	double2 neighbors_value[30];
 	int no_of_neighbors = 0;
 
 	for (int i = 0; i < 2 * countof_gpu_delaunay_edgesforeachvoronoi[voronoi_edge_index]; i++)
@@ -539,6 +541,7 @@ __global__ void NNcrustKernel(int no_of_points, int voronoi_edge_index, double2 
 		if (gpu_delaunay_edgesindexforeachvoronoi[voronoi_edge_index][i] == point_of_interest_idx)
 		{
 			neighbors_index[no_of_neighbors] = gpu_delaunay_edgesindexforeachvoronoi[voronoi_edge_index][i + 1 + (i % 2)*-2];
+			neighbors_value[no_of_neighbors] = gpu_delaunay_edgesforeachvoronoi[voronoi_edge_index][i + 1 + (i % 2)*-2];
 			no_of_neighbors++;
 		}
 
@@ -547,15 +550,13 @@ __global__ void NNcrustKernel(int no_of_points, int voronoi_edge_index, double2 
 	int nearest_point_index = 0;
 
 	double distance_between_poi_currentp;
-	double distace_between_poi_nearest_point;
-	double2 nearest_point;
+	double distace_between_poi_nearest_point = 10e9;
+	double2 nearest_point =  make_double2(0, 0);
 	double2 current_point;
 
-	distace_between_poi_nearest_point = double2_distance(point_of_interest, gpu_delaunay_edgesforeachvoronoi[voronoi_edge_index][nearest_point_index]);
-
-	for (int i = 1; i < no_of_neighbors; i++)
+	for (int i = 0; i < no_of_neighbors; i++)
 	{
-		current_point = gpu_delaunay_edgesforeachvoronoi[voronoi_edge_index][i];
+		current_point = neighbors_value[i];
 
 		distance_between_poi_currentp = double2_distance(point_of_interest, current_point);
 
@@ -563,7 +564,7 @@ __global__ void NNcrustKernel(int no_of_points, int voronoi_edge_index, double2 
 		{
 			nearest_point_index = i;
 
-			nearest_point = gpu_delaunay_edgesforeachvoronoi[voronoi_edge_index][nearest_point_index];
+			nearest_point = neighbors_value[i];
 
 			distace_between_poi_nearest_point = double2_distance(point_of_interest, nearest_point);
 		}
@@ -574,14 +575,14 @@ __global__ void NNcrustKernel(int no_of_points, int voronoi_edge_index, double2 
 
 	int halfneighbor_point_index = -1;
 	double distance_between_poi_halfneighbor = 10e9;
-	double2 halfneighbor_point = make_double2(0,0);
+	double2 halfneighbor_point = make_double2(0, 0);
 	bool half_exist = false;
 
 	for (int i = 0; i < no_of_neighbors; i++)
 	{
-		current_point = gpu_delaunay_edgesforeachvoronoi[voronoi_edge_index][i];
+		current_point = neighbors_value[i];
 
-		distance_between_poi_currentp = double2_distance(point_of_interest, gpu_delaunay_edgesforeachvoronoi[voronoi_edge_index][i]);
+		distance_between_poi_currentp = double2_distance(point_of_interest, current_point);
 
 		if (i != nearest_point_index)
 		{
@@ -590,13 +591,14 @@ __global__ void NNcrustKernel(int no_of_points, int voronoi_edge_index, double2 
 				half_exist = true;
 
 				halfneighbor_point_index = i;
-				
-				halfneighbor_point = gpu_delaunay_edgesforeachvoronoi[voronoi_edge_index][i];
+
+				halfneighbor_point = neighbors_value[i];
 
 				distance_between_poi_halfneighbor = double2_distance(point_of_interest, halfneighbor_point);
 			}
 		}
 	}
+	printf("nearest point -- halfneighbor point: (%lf, %lf) -- (%lf, %lf) \n", nearest_point.x, nearest_point.y, halfneighbor_point.x, halfneighbor_point.y);
 
 	gpu_nncrust_edgesforeach_voronoithresholdpoint[voronoi_edge_index][2 * point_of_interest_idx] = nearest_point;
 	gpu_nncrust_edgesforeach_voronoithresholdpoint[voronoi_edge_index][2 * point_of_interest_idx + 1] = halfneighbor_point;
@@ -617,16 +619,22 @@ __global__ void NNcrustKernel(int no_of_points, int voronoi_edge_index, double2 
 	{
 		gpu_nncrust_intersectionpoints_foreachvoronoi[voronoi_edge_index][2 * point_of_interest_idx] = make_double2(0, 0);
 	}
+	
 }
 
 __global__ void print_NNcurst()
 {
 	int lane_idx = threadIdx.x;
-	int n = countof_gpu_voronoi_thresholdpointsforeachedge[lane_idx];
-	for (int i = 0; i < n; i++)
+	if (lane_idx == 3)
 	{
-		printf("nn curst %d : %f - (%f-- %f) \n", lane_idx, gpu_voronoi_thresholdpointsforeachedge[lane_idx][i],gpu_nncrust_edgesforeach_voronoithresholdpoint[lane_idx][i * 2], gpu_nncrust_edgesforeach_voronoithresholdpoint[lane_idx][i * 2 + 1]);
+		int n = countof_gpu_voronoi_thresholdpointsforeachedge[lane_idx];
+		for (int i = 0; i < n; i++)
+		{
+			printf("nn curst: (%f, %f) -- (%f, %f) \n", gpu_voronoi_thresholdpointsforeachedge[lane_idx][i].x, gpu_voronoi_thresholdpointsforeachedge[lane_idx][i].y, gpu_nncrust_edgesforeach_voronoithresholdpoint[lane_idx][2 * i].x, gpu_nncrust_edgesforeach_voronoithresholdpoint[lane_idx][2 * i].y);
+			printf("nn curst: (%f, %f) -- (%f, %f) \n", gpu_voronoi_thresholdpointsforeachedge[lane_idx][i].x, gpu_voronoi_thresholdpointsforeachedge[lane_idx][i].y, gpu_nncrust_edgesforeach_voronoithresholdpoint[lane_idx][(2 * i) + 1].x, gpu_nncrust_edgesforeach_voronoithresholdpoint[lane_idx][(2 * i) + 1].y);
+		}
 	}
+	
 }
 
 __global__ void finalize(int no_of_points, int voronoi_edge_index, int* d_no_of_intersections, double2* d_intersections, double2* d_delaunayPoints)

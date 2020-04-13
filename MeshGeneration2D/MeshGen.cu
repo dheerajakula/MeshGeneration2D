@@ -219,8 +219,11 @@ int main()
 
 	// Launch a kernel on the GPU with one thread for each element.
 	delaunayKernel << <1, 4 >> > (d_lines, d_delaunayPoints, d_no_of_intersections, d_intersections);
+	cudaDeviceSynchronize();
 	print_delaunay << <1, 4 >> > ();
+	cudaDeviceSynchronize();
 	print_delaunayindex << <1, 4 >> > ();
+	cudaDeviceSynchronize();
 	print_NNcurst << <1, 4 >> > ();
 
 	
