@@ -30,7 +30,7 @@
 //#else
 	//#include <CGAL/Arithmetic_filter.h>
 //#endif
-#include <CGAL\Triangulation_2.h>
+#include <CGAL/Triangulation_2.h>
 #include <CGAL/Triangulation_face_base_2.h>
 #include <CGAL/Triangulation_vertex_base_2.h>
 #include <CGAL/Triangulation_vertex_base_with_info_2.h>
