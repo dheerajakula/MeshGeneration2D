@@ -6,17 +6,9 @@
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 #include <helper_cuda.h>
-#include <list> 
 #include <vector> 
-#include <sstream>
-#include <fstream>
-#include <string> 
-#include <stdio.h>
-#include <time.h>
-#include <iostream> 
-#include <fstream> 
-#include <math.h>
-#include "global_datatype.h"
+
+using namespace std;
 
 #define FULL_MASK 0xffffffff
 #define NUM_THREADS_PER_BLOCK 128
@@ -726,7 +718,7 @@ __global__ void printPoints(Points *inside_points, int num_of_lines){
 
 Points* initializeInsidePoints(int num_of_edges){
 	Points *h_points = new Points[num_of_edges]; //= (Points*)malloc(num_of_edges*sizeof(Points));
-	vector< thrust::device_vector<double> > X(num_of_edges);
+ 	vector< thrust::device_vector<double> > X(num_of_edges);
 	vector< thrust::device_vector<double> > Y(num_of_edges);
 
 

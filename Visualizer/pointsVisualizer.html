@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+    <title>view dataset</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-1.2.0.min.js"></script>
+</head>
+
+<body>
+    <div id="myDiv" style="width:600px;height:600px;"></div>
+    <script>
+        jQuery.get(
+            'http://localhost/2.5width_4patels.txt',
+            function (data) {
+                var myvar = data;
+            }
+        );
+    </script>
+    <script>
+        var trace1 = {
+            x: [1, 2, 3, 4],
+            y: [10, 15, 13, 17],
+            mode: 'markers',
+            type: 'scatter'
+        };
+
+        var trace2 = {
+            x: [1, 2, 3, 4],
+            y: [10, 15, 13, 17],
+            mode: 'lines',
+            type: 'scatter'
+        };
+
+        var data = [trace1, trace2];
+
+        Plotly.newPlot('myDiv', data);
+    </script>
+</body>
+
+</html>
