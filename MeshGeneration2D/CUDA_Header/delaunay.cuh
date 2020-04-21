@@ -598,10 +598,14 @@ __global__ void NNcrustKernel(int no_of_points, int voronoi_edge_index, double2 
 			}
 		}
 	}
-	printf("nearest point -- halfneighbor point: (%lf, %lf) -- (%lf, %lf) \n", nearest_point.x, nearest_point.y, halfneighbor_point.x, halfneighbor_point.y);
+	//printf("nearest point -- halfneighbor point: (%lf, %lf) -- (%lf, %lf) \n", nearest_point.x, nearest_point.y, halfneighbor_point.x, halfneighbor_point.y);
 
 	gpu_nncrust_edgesforeach_voronoithresholdpoint[voronoi_edge_index][2 * point_of_interest_idx] = nearest_point;
 	gpu_nncrust_edgesforeach_voronoithresholdpoint[voronoi_edge_index][2 * point_of_interest_idx + 1] = halfneighbor_point;
+
+	printf("nn curst: %f %f %f %f\n", point_of_interest.x, point_of_interest.y, nearest_point.x, nearest_point.y);
+	if (half_exist)
+		printf("nn curst: %f %f %f %f\n", point_of_interest.x, point_of_interest.y, halfneighbor_point.x, halfneighbor_point.y);
 
 	if (doIntersect(point_of_interest, nearest_point, voronoiedge_endpoint_a, voronoiedge_endpoint_b))
 	{
@@ -630,8 +634,8 @@ __global__ void print_NNcurst()
 		int n = countof_gpu_voronoi_thresholdpointsforeachedge[lane_idx];
 		for (int i = 0; i < n; i++)
 		{
-			printf("nn curst: (%f, %f) -- (%f, %f) \n", gpu_voronoi_thresholdpointsforeachedge[lane_idx][i].x, gpu_voronoi_thresholdpointsforeachedge[lane_idx][i].y, gpu_nncrust_edgesforeach_voronoithresholdpoint[lane_idx][2 * i].x, gpu_nncrust_edgesforeach_voronoithresholdpoint[lane_idx][2 * i].y);
-			printf("nn curst: (%f, %f) -- (%f, %f) \n", gpu_voronoi_thresholdpointsforeachedge[lane_idx][i].x, gpu_voronoi_thresholdpointsforeachedge[lane_idx][i].y, gpu_nncrust_edgesforeach_voronoithresholdpoint[lane_idx][(2 * i) + 1].x, gpu_nncrust_edgesforeach_voronoithresholdpoint[lane_idx][(2 * i) + 1].y);
+			printf("nn curst: %f %f %f %f \n", gpu_voronoi_thresholdpointsforeachedge[lane_idx][i].x, gpu_voronoi_thresholdpointsforeachedge[lane_idx][i].y, gpu_nncrust_edgesforeach_voronoithresholdpoint[lane_idx][2 * i].x, gpu_nncrust_edgesforeach_voronoithresholdpoint[lane_idx][2 * i].y);
+			printf("nn curst: %f %f %f %f \n", gpu_voronoi_thresholdpointsforeachedge[lane_idx][i].x, gpu_voronoi_thresholdpointsforeachedge[lane_idx][i].y, gpu_nncrust_edgesforeach_voronoithresholdpoint[lane_idx][(2 * i) + 1].x, gpu_nncrust_edgesforeach_voronoithresholdpoint[lane_idx][(2 * i) + 1].y);
 		}
 	}
 	
@@ -646,6 +650,7 @@ __global__ void finalize(int no_of_points, int voronoi_edge_index, int* d_no_of_
 	for (int i = 0; i < 2*no_of_points; i++)
 	{
 		double2 p = gpu_nncrust_intersectionpoints_foreachvoronoi[voronoi_edge_index][i];
+		printf("intersection point: %f %f\n", p.x, p.y);
 		
 		bool repeated_element = false;
 
@@ -684,6 +689,7 @@ __global__ void finalize(int no_of_points, int voronoi_edge_index, int* d_no_of_
 	}
 	ans = intersectedpoints[max_index];
 	d_intersections[voronoi_edge_index] = ans;
+	
 }
 
 __global__ void delaunayKernel(Line_Segment* d_lines, double2* d_delaunayPoints, int* d_no_of_intersections, double2* d_intersections)
@@ -923,9 +929,9 @@ __global__ void delaunayKernel(Line_Segment* d_lines, double2* d_delaunayPoints,
 	int i = threadIdx.x;
 	Delaunay_Vector2 z1 = Delaunay_Vector2(1.12, 2.34);
 
-	printf("edge count: %d", edge_count);
+	//printf("edge count: %d", edge_count);
 	//printf("debug count:%d", debug_count);
-	printf("triangle count: %d", triangle_count);
+	//printf("triangle count: %d", triangle_count);
 	//printf(almost_equal(2.11111111111112, 2.11111111111111,10000) ? "true" : "false");
 
 }
@@ -936,7 +942,7 @@ __global__ void print_delaunay()
 	int n = countof_gpu_delaunay_edgesforeachvoronoi[lane_idx];
 	for (int i = 0; i < n; i++)
 	{
-		printf("%d : %f %f -- %f %f\n", lane_idx, gpu_delaunay_edgesforeachvoronoi[lane_idx][i * 2].x, gpu_delaunay_edgesforeachvoronoi[lane_idx][i * 2].y, gpu_delaunay_edgesforeachvoronoi[lane_idx][i * 2 + 1].x, gpu_delaunay_edgesforeachvoronoi[lane_idx][i * 2 + 1].y);
+		printf("%d : %f %f %f %f\n", lane_idx, gpu_delaunay_edgesforeachvoronoi[lane_idx][i * 2].x, gpu_delaunay_edgesforeachvoronoi[lane_idx][i * 2].y, gpu_delaunay_edgesforeachvoronoi[lane_idx][i * 2 + 1].x, gpu_delaunay_edgesforeachvoronoi[lane_idx][i * 2 + 1].y);
 	}
 }
 
