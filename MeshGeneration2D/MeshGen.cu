@@ -12,13 +12,6 @@ __device__ double2 gpu_delaunay_edgesforeachvoronoi[MAX_VORONOI_EDGES][6*MAX_POI
 __device__ int gpu_delaunay_edgesindexforeachvoronoi[MAX_VORONOI_EDGES][6 * MAX_POINTS_SIZE - 15];
 __device__ int countof_gpu_delaunay_edgesforeachvoronoi[MAX_VORONOI_EDGES];
 
-Quadtree_Node* d_root;
-
-Points *d_points;
-
-Points* d_inside_points;
-
-double threshold;
 
 void MinMaxCoor(std::vector<Point_2> &input, Iso_rectangle_2& box){
 	//double maxX=0,minX=DBL_MAX,maxY=0,minY=DBL_MAX;
@@ -61,7 +54,7 @@ Segment_2 convToSeg(const Iso_rectangle_2& box, const Ray_2& ray){
 	}
 }
 
-std::vector<std::pair<int, std::pair<double2,double2>>> process_on_gpu(std::vector<Segment_2> VorEdges, std::vector<Segment_2> DelEdges)
+std::vector<std::pair<int, std::pair<double2, double2>>> process_on_gpu(std::vector<Segment_2> VorEdges, std::vector<Segment_2> DelEdges, Quadtree_Node* d_root, Points* d_points,double threshold)
 {
 	int num_lines = VorEdges.size();
 
@@ -97,7 +90,8 @@ std::vector<std::pair<int, std::pair<double2,double2>>> process_on_gpu(std::vect
 	checkCudaErrors(cudaMalloc((void**)&d_no_of_intersections, num_lines*sizeof(int)));
 	checkCudaErrors(cudaMalloc((void**)&d_intersections, num_lines*sizeof(double2)));
 
-	findOuterThresholdPoints << <1, 4 >> >(d_root, d_points, d_lines, d_inside_points, threshold);
+	findOuterThresholdPoints << <1, num_lines >> >(d_root, d_points, d_lines, threshold);
+	print_gpu_voronoi_thresholdpointsforeachedge << <1, num_lines >> >();
 
 	delaunayKernel << <1, num_lines >> > (d_lines, d_delaunayPoints, d_no_of_intersections, d_intersections);
 	cudaDeviceSynchronize();
@@ -229,6 +223,14 @@ int main()
 		RandomSample.push_back(OriginalSample.at(n));
 	}
 
+	for (int i = 0; i<5; i++)
+	{
+		std::srand(1);
+		int n = std::rand() % (num_points - 1);
+		std::cout << "Index:" << n << std::endl;
+		std::cout << "Seed Points:" <<RandomSample[i] << std::endl;
+	}
+
 	Delaunay dt_sample;
 
 	dt_sample.insert(RandomSample.begin(), RandomSample.end());
@@ -288,7 +290,7 @@ int main()
 
 
 	//device_points
-	//Points *d_points;
+	Points *d_points;
 	checkCudaErrors(cudaMalloc((void**)&d_points, 2 * sizeof(Points)));
 	gpuErrchk(cudaPeekAtLastError());
 	gpuErrchk(cudaDeviceSynchronize());
@@ -308,7 +310,8 @@ int main()
 	Quadtree_Node h_root;
 	h_root.setRange(0, num_points);
 	h_root.setIdx(1024);
-	//Quadtree_Node* d_root;
+	Quadtree_Node* d_root;
+
 	checkCudaErrors(cudaMalloc((void**)&d_root, sizeof(Quadtree_Node)));
 	checkCudaErrors(cudaMemcpy(d_root, &h_root, sizeof(Quadtree_Node), cudaMemcpyHostToDevice));
 
@@ -331,7 +334,7 @@ int main()
 	int num_of_lines = 4;
 	printf("Before Inside Initialization\n");
 	//Points* d_inside_points = initializeInsidePoints(num_of_lines);
-	d_inside_points = initializeInsidePoints(num_of_lines);
+	//d_inside_points = initializeInsidePoints(num_of_lines);
 	//printf("After Inside points\n");
 	cudaDeviceSynchronize();
 	Line_Segment *h_lines = new Line_Segment[num_of_lines];
@@ -344,7 +347,7 @@ int main()
 	Line_Segment *d_lines;
 	checkCudaErrors(cudaMalloc((void**)&d_lines, num_of_lines*sizeof(Line_Segment)));
 	checkCudaErrors(cudaMemcpy(d_lines, h_lines, num_of_lines*sizeof(Line_Segment), cudaMemcpyHostToDevice));
-	//double threshold = 10;
+	double threshold = 10;
 
 	double2 *h_delaunayPoints = new double2[num_of_lines];
 	h_delaunayPoints[0] = make_double2(10.0,4.0);
@@ -369,12 +372,12 @@ int main()
 
 	std::cout << "Outer threshold Points: " << std::endl;
 	start = clock();
-	findOuterThresholdPoints << <1, 4 >> >(d_root, d_points, d_lines, d_inside_points, threshold);
+	findOuterThresholdPoints << <1, 4 >> >(d_root, d_points, d_lines, threshold);
 	cudaDeviceSynchronize();
 	end = clock();
 	run_time = ((double)(end - start) / CLOCKS_PER_SEC);
 	std::cout << "Outer threshold Execution Time: " << run_time << std::endl;
-	printPoints << <1, 1 >> >(d_inside_points, num_of_lines); // no. of line, points
+	//printPoints << <1, 1 >> >(d_inside_points, num_of_lines); // no. of line, points
 
 
 	printf("____________________________");
@@ -474,7 +477,8 @@ int main()
 			}
 		}//2
 
-		process_on_gpu(VorEdges, DelEdges);
+		process_on_gpu(VorEdges, DelEdges, d_root, d_points, threshold);
+
 		for (std::vector<Segment_2>::iterator vi = VorEdges.begin(); vi != VorEdges.end(); ++vi)
 		{
 			std::cout << "Voronoi Edges		" << vi->source() << " " << vi->end() << std::endl;

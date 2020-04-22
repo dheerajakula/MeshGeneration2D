@@ -360,7 +360,7 @@ __device__ int nodeInsideThreshold(Line_Segment line, Bounding_Box box, Quadtree
 
 }
 
-__global__ void findOuterThresholdPoints(Quadtree_Node *root, Points *points, Line_Segment *lines, Points *inside_points, double threshold){
+__global__ void findOuterThresholdPoints(Quadtree_Node *root, Points *points, Line_Segment *lines, double threshold){
 	printf("Threshold is %lf\n",threshold);
 	int line_idx = threadIdx.x;
 	printf("%d \n", line_idx);
@@ -380,7 +380,6 @@ __global__ void findOuterThresholdPoints(Quadtree_Node *root, Points *points, Li
 					gpu_voronoi_thresholdpointsforeachedge[line_idx][count_points_per_edge] = p;
 					count_points_per_edge++;
 					// printf("%f %f\n", line_idx, p.x, p.y);
-					inside_points[line_idx].addPoint(p);
 
 				}
 			}

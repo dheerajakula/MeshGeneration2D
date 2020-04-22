@@ -532,8 +532,8 @@ __global__ void NNcrustKernel(int no_of_points, int voronoi_edge_index, double2 
 
 	double2 point_of_interest = gpu_voronoi_thresholdpointsforeachedge[voronoi_edge_index][point_of_interest_idx];
 
-	int neighbors_index[30];
-	double2 neighbors_value[30];
+	int neighbors_index[50];
+	double2 neighbors_value[50];
 	int no_of_neighbors = 0;
 
 	for (int i = 0; i < 2 * countof_gpu_delaunay_edgesforeachvoronoi[voronoi_edge_index]; i++)
@@ -542,10 +542,12 @@ __global__ void NNcrustKernel(int no_of_points, int voronoi_edge_index, double2 
 		{
 			neighbors_index[no_of_neighbors] = gpu_delaunay_edgesindexforeachvoronoi[voronoi_edge_index][i + 1 + (i % 2)*-2];
 			neighbors_value[no_of_neighbors] = gpu_delaunay_edgesforeachvoronoi[voronoi_edge_index][i + 1 + (i % 2)*-2];
+			
 			no_of_neighbors++;
 		}
 
 	}
+
 
 	int nearest_point_index = 0;
 
@@ -568,12 +570,10 @@ __global__ void NNcrustKernel(int no_of_points, int voronoi_edge_index, double2 
 
 			distace_between_poi_nearest_point = double2_distance(point_of_interest, nearest_point);
 		}
-
-
 	}
 
 
-	int halfneighbor_point_index = -1;
+	int halfneighbor_point_index = 0;
 	double distance_between_poi_halfneighbor = 10e9;
 	double2 halfneighbor_point = make_double2(0, 0);
 	bool half_exist = false;
@@ -598,14 +598,14 @@ __global__ void NNcrustKernel(int no_of_points, int voronoi_edge_index, double2 
 			}
 		}
 	}
-	//printf("nearest point -- halfneighbor point: (%lf, %lf) -- (%lf, %lf) \n", nearest_point.x, nearest_point.y, halfneighbor_point.x, halfneighbor_point.y);
+	
 
 	gpu_nncrust_edgesforeach_voronoithresholdpoint[voronoi_edge_index][2 * point_of_interest_idx] = nearest_point;
 	gpu_nncrust_edgesforeach_voronoithresholdpoint[voronoi_edge_index][2 * point_of_interest_idx + 1] = halfneighbor_point;
 
-	printf("nn curst: %f %f %f %f\n", point_of_interest.x, point_of_interest.y, nearest_point.x, nearest_point.y);
+	printf("np nn curst: %f %f %f %f\n", point_of_interest.x, point_of_interest.y, nearest_point.x, nearest_point.y);
 	if (half_exist)
-		printf("nn curst: %f %f %f %f\n", point_of_interest.x, point_of_interest.y, halfneighbor_point.x, halfneighbor_point.y);
+		printf("hp nn curst: %f %f %f %f\n", point_of_interest.x, point_of_interest.y, halfneighbor_point.x, halfneighbor_point.y);
 
 	if (doIntersect(point_of_interest, nearest_point, voronoiedge_endpoint_a, voronoiedge_endpoint_b))
 	{
@@ -940,10 +940,12 @@ __global__ void print_delaunay()
 {
 	int lane_idx = threadIdx.x;
 	int n = countof_gpu_delaunay_edgesforeachvoronoi[lane_idx];
+
 	for (int i = 0; i < n; i++)
 	{
 		printf("%d : %f %f %f %f\n", lane_idx, gpu_delaunay_edgesforeachvoronoi[lane_idx][i * 2].x, gpu_delaunay_edgesforeachvoronoi[lane_idx][i * 2].y, gpu_delaunay_edgesforeachvoronoi[lane_idx][i * 2 + 1].x, gpu_delaunay_edgesforeachvoronoi[lane_idx][i * 2 + 1].y);
 	}
+	
 }
 
 __global__ void print_delaunayindex()
