@@ -13,8 +13,10 @@ using namespace std;
 #define FULL_MASK 0xffffffff
 #define NUM_THREADS_PER_BLOCK 128
 #define STACK_SIZE 400
-#define MAX_POINTS_SIZE 600 
-#define MAX_VORONOI_EDGES 1000
+
+#define MAX_POINTS_SIZE 200
+#define MAX_VORONOI_EDGES 10000
+
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 
 extern __device__ double2 gpu_voronoi_thresholdpointsforeachedge[MAX_VORONOI_EDGES][MAX_POINTS_SIZE];
@@ -114,8 +116,10 @@ public:
 		return xMin;
 	}
 	__host__ __device__ __forceinline__ void printBox() const {
-		printf("%f %f %f %f --", xMin, yMax, xMax, yMax);
+		printf("%f %f %f %f\n", xMin, yMax, xMax, yMax);
+		printf("%f %f %f %f\n", xMax, yMax, xMax, yMin);
 		printf("%f %f %f %f\n", xMax, yMin, xMin, yMin);
+		printf("%f %f %f %f\n", xMin, yMin, xMin, yMax);
 	}
 	__host__ __device__ bool contains(const double2 &p) const {
 		return (p.x >= xMin && p.y >= yMin && p.x < xMax && p.y < yMax);
@@ -344,8 +348,9 @@ __global__ void print_gpu_voronoi_thresholdpointsforeachedge()
 
 }
 
-__device__ int nodeInsideThreshold(Line_Segment line, Bounding_Box box, Quadtree_Node* root, double threshold){
+__device__ int nodeInsideThreshold(Line_Segment line, Bounding_Box boxe , Quadtree_Node* root, double threshold){
 	double2 LT, RT, LB, RB;
+	Bounding_Box box = root->getBoundingBox();
 	LT = make_double2(box.getxMin(), box.getyMax());
 	RT = make_double2(box.getxMax(), box.getyMax());
 	LB = make_double2(box.getxMin(), box.getyMin());
@@ -355,7 +360,12 @@ __device__ int nodeInsideThreshold(Line_Segment line, Bounding_Box box, Quadtree
 		|| (line.getPerpendicularDistance(LB) <= threshold) ||
 		(line.getPerpendicularDistance(RB) <= threshold));
 	bool boxIntersects = ((line.intersectsWithBox(box)) || (line.getLeftThreshold(threshold).intersectsWithBox(box)) || (line.getRightThreshold(threshold).intersectsWithBox(box)));
-	// printf("boxInside=%d,boxIntersects=%d \n",boxInside,boxIntersects);
+	if (line.insidePerpendicularBounds(box) && (boxInside || boxIntersects) && root->isLeaf() && root->numberOfPoints() != 0)
+	{
+		printf("boxInside=%d,boxIntersects=%d,intersectwithbox=%d,intersectwithleft=%d,intersectwithright=%d -- %lf %lf -- %lf %lf  %lf#%lf\n", boxInside, boxIntersects, line.intersectsWithBox(box), 
+			line.getLeftThreshold(threshold).intersectsWithBox(box), line.getRightThreshold(threshold).intersectsWithBox(box), line.P1.x, line.P1.y, line.P2.x, line.P2.y, box.computeCenter().x, box.computeCenter().y);
+	}
+		
 	return line.insidePerpendicularBounds(box) && (boxInside || boxIntersects);
 
 }
@@ -376,9 +386,15 @@ __global__ void findOuterThresholdPoints(Quadtree_Node *root, Points *points, Li
 				printf("line_idx: %d no_of_pointsinleaf: %d \n", line_idx, no_of_pointsinleaf);
 				int count_in_for_looop = 0;
 				for (int i = X->getStartIdx(); i<X->getEndIdx(); i++){
+					
 					double2 p = points[0].getPoint(i);
-					gpu_voronoi_thresholdpointsforeachedge[line_idx][count_points_per_edge] = p;
-					count_points_per_edge++;
+
+					if (lines[line_idx].getPerpendicularDistance(p) <= threshold)
+					{
+						gpu_voronoi_thresholdpointsforeachedge[line_idx][count_points_per_edge] = p;
+						count_points_per_edge++;
+					}
+					
 					// printf("%f %f\n", line_idx, p.x, p.y);
 
 				}

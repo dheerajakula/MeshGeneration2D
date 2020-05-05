@@ -54,10 +54,10 @@ Segment_2 convToSeg(const Iso_rectangle_2& box, const Ray_2& ray){
 	}
 }
 
-std::vector<std::pair<int, std::pair<double2, double2>>> process_on_gpu(std::vector<Segment_2> VorEdges, std::vector<Segment_2> DelEdges, Quadtree_Node* d_root, Points* d_points,double threshold)
+std::vector<std::pair<int, double2>> process_on_gpu(std::vector<Segment_2> VorEdges, std::vector<Segment_2> DelEdges, Quadtree_Node* d_root, Points* d_points,double threshold)
 {
 	int num_lines = VorEdges.size();
-
+	
 	Line_Segment *h_lines = new Line_Segment[num_lines];
 	Line_Segment *d_lines;
 
@@ -70,7 +70,7 @@ std::vector<std::pair<int, std::pair<double2, double2>>> process_on_gpu(std::vec
 	double2* h_intersections = new double2[num_lines];
 	double2* d_intersections;
 
-	std::vector<std::pair<int, std::pair<double2, double2>>> ans;
+	std::vector<std::pair<int,  double2>> ans;
 
 
 	for (int i = 0; i < VorEdges.size(); i++)
@@ -81,6 +81,14 @@ std::vector<std::pair<int, std::pair<double2, double2>>> process_on_gpu(std::vec
 		
 	}
 
+	size_t size_heap;
+	size_t size_stack;
+	std::cout << "-----------------------_________________Debug Info(inside function)__________________---------------------" << std::endl;
+	cudaDeviceGetLimit(&size_heap, cudaLimitMallocHeapSize);
+	std::cout << "-----------------------" << size_heap << "---------------------" << std::endl;
+	cudaDeviceGetLimit(&size_stack, cudaLimitStackSize);
+	std::cout << "-----------------------" << size_stack << "---------------------" << std::endl;
+
 	checkCudaErrors(cudaMalloc((void**)&d_lines, num_lines*sizeof(Line_Segment)));
 	checkCudaErrors(cudaMemcpy(d_lines, h_lines, num_lines*sizeof(Line_Segment), cudaMemcpyHostToDevice));
 
@@ -90,19 +98,31 @@ std::vector<std::pair<int, std::pair<double2, double2>>> process_on_gpu(std::vec
 	checkCudaErrors(cudaMalloc((void**)&d_no_of_intersections, num_lines*sizeof(int)));
 	checkCudaErrors(cudaMalloc((void**)&d_intersections, num_lines*sizeof(double2)));
 
+	cudaError_t cudaStatus;
+
 	findOuterThresholdPoints << <1, num_lines >> >(d_root, d_points, d_lines, threshold);
 	print_gpu_voronoi_thresholdpointsforeachedge << <1, num_lines >> >();
 
+	cudaStatus = cudaDeviceSynchronize();
+	if (cudaStatus != cudaSuccess) {
+		fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching finding threshold points!\n", cudaStatus);
+	}
+	
+	
 	delaunayKernel << <1, num_lines >> > (d_lines, d_delaunayPoints, d_no_of_intersections, d_intersections);
-	cudaDeviceSynchronize();
+	
+	cudaStatus = cudaDeviceSynchronize();
+	if (cudaStatus != cudaSuccess) {
+		fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching delaunay kernel!\n", cudaStatus);
+	}
 	print_delaunay << <1, num_lines >> > ();
 	
-	cudaError_t cudaStatus;
+	
 
 	// Check for any errors launching the kernel
 	cudaStatus = cudaGetLastError();
 	if (cudaStatus != cudaSuccess) {
-		fprintf(stderr, "addKernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
+		fprintf(stderr, "delaunay Kernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
 	}
 
 	// cudaDeviceSynchronize waits for the kernel to finish, and returns
@@ -113,29 +133,25 @@ std::vector<std::pair<int, std::pair<double2, double2>>> process_on_gpu(std::vec
 	}
 	cudaStatus = cudaMemcpy(h_no_of_intersections, d_no_of_intersections, num_lines*sizeof(int), cudaMemcpyDeviceToHost);
 	if (cudaStatus != cudaSuccess) {
-		fprintf(stderr, "cudaMemcpy failed!");
+		fprintf(stderr, "cudaMemcpy failed no of intersections!");
 
 	};
 
 	cudaStatus = cudaMemcpy(h_intersections, d_intersections, num_lines*sizeof(double2), cudaMemcpyDeviceToHost);
 	if (cudaStatus != cudaSuccess) {
-		fprintf(stderr, "cudaMemcpy failed!");
+		fprintf(stderr, "cudaMemcpy failed intersections!");
 
 	};
 
 	
 	for (int i = 0; i < num_lines; i++)
 	{
-		std::pair<double2, double2> p;
+		double2 p;
 		int no_of_intersections = h_no_of_intersections[i];
 		
-		if (no_of_intersections == 1)
-		{
-			p = make_pair(make_double2(DelEdges[i][0].x(), DelEdges[i][0].y()), make_double2(DelEdges[i][1].x(), DelEdges[i][1].y()));
-		}
-		else
-		{
-			p.first = make_double2(h_intersections[i].x, h_intersections[i].y);
+		if (no_of_intersections > 1)
+		{	
+			p = make_double2(h_intersections[i].x, h_intersections[i].y);
 		}
 		ans.push_back(make_pair(no_of_intersections, p));
 	}
@@ -146,10 +162,10 @@ std::vector<std::pair<int, std::pair<double2, double2>>> process_on_gpu(std::vec
 		cout << h_no_of_intersections[i] << " " << h_intersections[i].x << " " << h_intersections[i].y << endl;
 	}
 
-	delete h_lines;
-	delete h_delaunayPoints;
-	delete h_no_of_intersections;
-	delete h_intersections;
+	delete[] h_lines;
+	delete[] h_delaunayPoints;
+	delete[] h_no_of_intersections;
+	delete[] h_intersections;
 
 	cudaFree(d_lines);
 	cudaFree(d_delaunayPoints);
@@ -302,14 +318,25 @@ int main()
 	std::cout << "GPU Data Transfer Time: " << run_time << std::endl;
 
 	//Setting Cuda Heap size for dynamic memory allocation	
-	size_t size = 1024 * 1024 * 1024;
+	size_t size = 1024 * 1024 * 1024 * 4;
 	cudaDeviceSetLimit(cudaLimitMallocHeapSize, size);
-	cudaDeviceGetLimit(&size, cudaLimitMallocHeapSize);
+	//cudaDeviceGetLimit(&size, cudaLimitMallocHeapSize);
 
+	
+
+	size_t free, total;
+
+	std::cout << "size of Delaunay_Triangle" << sizeof(Delaunay_Triangle) << std::endl;
+	std::cout << "size of Delaunay_Edge" << sizeof(Delaunay_Edge) << std::endl;
+	std::cout << "size of Delaunay_Vector2" << sizeof(Delaunay_Vector2) << std::endl;
+
+	cudaMemGetInfo(&free, &total);
+	std::cout << "free:" << free << "total" << total << endl;
 	//Copy root node from host to device
 	Quadtree_Node h_root;
 	h_root.setRange(0, num_points);
 	h_root.setIdx(1024);
+	h_root.setBoundingBox(boundingBox.xmin(), boundingBox.ymin(), boundingBox.xmax(), boundingBox.ymax());
 	Quadtree_Node* d_root;
 
 	checkCudaErrors(cudaMalloc((void**)&d_root, sizeof(Quadtree_Node)));
@@ -338,9 +365,9 @@ int main()
 	//printf("After Inside points\n");
 	cudaDeviceSynchronize();
 	Line_Segment *h_lines = new Line_Segment[num_of_lines];
-	h_lines[0] = Line_Segment(make_double2(100.0, -200.0), make_double2(0.0, 300.0));
-	h_lines[1] = Line_Segment(make_double2(0.0, 300.0), make_double2(600.0, 650.0));
-	h_lines[2] = Line_Segment(make_double2(0.0, 300.0), make_double2(-550.0, 680.0));
+	h_lines[0] = Line_Segment(make_double2(355.022, -80.8171), make_double2(750, 109.425));
+	h_lines[1] = Line_Segment(make_double2(-3.6909, 323.004), make_double2(-21.6498, -1159.58));
+	h_lines[2] = Line_Segment(make_double2(-21.6498, -1159.58), make_double2(355.022, -80.8171));
 	h_lines[3] = Line_Segment(make_double2(100.0, -200.0), make_double2(-600.0, -650.0));
 
 
@@ -379,6 +406,14 @@ int main()
 	std::cout << "Outer threshold Execution Time: " << run_time << std::endl;
 	//printPoints << <1, 1 >> >(d_inside_points, num_of_lines); // no. of line, points
 
+	size_t size_heap;
+	size_t size_stack;
+	std::cout << "-----------------------_________________Debug Info__________________---------------------" << std::endl;
+	cudaDeviceGetLimit(&size_heap, cudaLimitMallocHeapSize);
+	std::cout << "-----------------------" << size_heap << "---------------------" << std::endl;
+	cudaDeviceGetLimit(&size_stack, cudaLimitStackSize);
+	std::cout << "-----------------------" << size_stack << "---------------------" << std::endl;
+
 
 	printf("____________________________");
 	print_gpu_voronoi_thresholdpointsforeachedge << <1, 4 >> >();
@@ -390,27 +425,37 @@ int main()
 
 	// Launch a kernel on the GPU with one thread for each element.
 	delaunayKernel << <1, 4 >> > (d_lines, d_delaunayPoints, d_no_of_intersections, d_intersections);
-	cudaDeviceSynchronize();
-	print_delaunay << <1, 4 >> > ();
-	
-	print_delaunayindex << <1, 4 >> > ();
-	cudaDeviceSynchronize();
-	print_NNcurst << <1, 4 >> > ();
-
-	
-
-	// Check for any errors launching the kernel
 	cudaStatus = cudaGetLastError();
 	if (cudaStatus != cudaSuccess) {
-		fprintf(stderr, "addKernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
+		fprintf(stderr, "delaunayKernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
 	}
 
-	// cudaDeviceSynchronize waits for the kernel to finish, and returns
-	// any errors encountered during the launch.
 	cudaStatus = cudaDeviceSynchronize();
 	if (cudaStatus != cudaSuccess) {
 		fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching addKernel!\n", cudaStatus);
 	}
+
+	print_delaunay << <1, 4 >> > ();
+	cudaStatus = cudaGetLastError();
+	if (cudaStatus != cudaSuccess) {
+		fprintf(stderr, "print_delaunay launch failed: %s\n", cudaGetErrorString(cudaStatus));
+	}
+	
+	print_delaunayindex << <1, 4 >> > ();
+	cudaStatus = cudaGetLastError();
+	if (cudaStatus != cudaSuccess) {
+		fprintf(stderr, "print_delaunay index launch failed: %s\n", cudaGetErrorString(cudaStatus));
+	}
+
+	print_NNcurst << <1, 4 >> > ();
+	cudaStatus = cudaGetLastError();
+	if (cudaStatus != cudaSuccess) {
+		fprintf(stderr, "print_NNcurst launch failed: %s\n", cudaGetErrorString(cudaStatus));
+	}
+
+	
+	// any errors encountered during the launch.
+	
 	cudaStatus = cudaMemcpy(h_no_of_intersections, d_no_of_intersections, num_of_lines*sizeof(int), cudaMemcpyDeviceToHost);
 	if (cudaStatus != cudaSuccess) {
 		fprintf(stderr, "cudaMemcpy failed!");
@@ -427,7 +472,14 @@ int main()
 	for (int i = 0; i < num_of_lines; i++)
 	{
 		cout << h_no_of_intersections[i] << " " << h_intersections[i].x <<" "<< h_intersections[i].y << endl;
+
 	}
+
+	std::cout << "-----------------------_________________Debug Info after__________________---------------------" << std::endl;
+	cudaDeviceGetLimit(&size_heap, cudaLimitMallocHeapSize);
+	std::cout << "-----------------------" << size_heap << "---------------------" << std::endl;
+	cudaDeviceGetLimit(&size_stack, cudaLimitStackSize);
+	std::cout << "-----------------------" << size_stack << "---------------------" << std::endl;
 
 	std::cout << ".....................................Topology............................." << std::endl;
 
@@ -435,7 +487,7 @@ int main()
 	std::vector<Segment_2> DelEdges;
 	Segment_2 segm;
 	bool iterate = true;
-
+	std::vector<std::pair<int, double2>> results_from_gpu;
 	while (iterate)
 	{
 	
@@ -476,8 +528,36 @@ int main()
 				delete temp;
 			}
 		}//2
+		clock_t start = clock();
 
-		process_on_gpu(VorEdges, DelEdges, d_root, d_points, threshold);
+		results_from_gpu = process_on_gpu(VorEdges, DelEdges, d_root, d_points, threshold);
+		std::cout << "***************************************************final results *******************************************"  << std::endl;
+
+		for (int i = 0; i < results_from_gpu.size(); i++)
+		{
+			int number_of_intersections = results_from_gpu[i].first;
+
+			std::cout << "Number of intersections: " << number_of_intersections << std::endl;
+
+			if (number_of_intersections == 0)
+			{
+				std::cout << "correspoding index of VorEdges or DelEdges: " << i << std::endl;
+			}
+			else if (number_of_intersections == 1)
+			{
+				std::cout << "correspoding index of VorEdges or DelEdges: " << i << std::endl;
+				std::cout << "The delaunay edge being: " << DelEdges[i][0].x() <<" "<< DelEdges[i][0].y() <<" -- "<< DelEdges[i][1].x() <<" "<< DelEdges[i][1].y() << std::endl;
+			}
+			else
+			{
+				std::cout << "correspoding index of VorEdges or DelEdges: " << i << std::endl;
+				std::cout << "The farthest point being: " << results_from_gpu[i].second.x <<" "<<results_from_gpu[i].second.y << std::endl;
+
+			}
+		}
+
+		std::cout << "**************************************************************************************************************" << std::endl;
+		end = clock();
 
 		for (std::vector<Segment_2>::iterator vi = VorEdges.begin(); vi != VorEdges.end(); ++vi)
 		{
@@ -490,6 +570,8 @@ int main()
 		}
 	}
 
+	run_time = ((double)(end - start) / CLOCKS_PER_SEC);
+	std::cout << "Time to Calculate Delaunay " << run_time << std::endl;
 	int i;
 	std::cin >> i;
 }

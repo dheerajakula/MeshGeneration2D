@@ -15,8 +15,8 @@
 
 #include "QuadTree.cuh"
 
-#define MAX_POINTS_SIZE 600
-#define MAX_VORONOI_EDGES 1000
+#define MAX_POINTS_SIZE 200
+#define MAX_VORONOI_EDGES 10000
 
 
 extern __device__ double2 gpu_nncrust_edgesforeach_voronoithresholdpoint[MAX_VORONOI_EDGES][MAX_POINTS_SIZE*2];
@@ -532,8 +532,8 @@ __global__ void NNcrustKernel(int no_of_points, int voronoi_edge_index, double2 
 
 	double2 point_of_interest = gpu_voronoi_thresholdpointsforeachedge[voronoi_edge_index][point_of_interest_idx];
 
-	int neighbors_index[50];
-	double2 neighbors_value[50];
+	int neighbors_index[200];
+	double2 neighbors_value[200];
 	int no_of_neighbors = 0;
 
 	for (int i = 0; i < 2 * countof_gpu_delaunay_edgesforeachvoronoi[voronoi_edge_index]; i++)
@@ -692,20 +692,20 @@ __global__ void finalize(int no_of_points, int voronoi_edge_index, int* d_no_of_
 	
 }
 
-__global__ void delaunayKernel(Line_Segment* d_lines, double2* d_delaunayPoints, int* d_no_of_intersections, double2* d_intersections)
+__global__ void delaunayKernel_dummy(Line_Segment* d_lines, double2* d_delaunayPoints, int* d_no_of_intersections, double2* d_intersections)
 {
 
 	using TriangleType = Delaunay_Triangle;
 	using EdgeType = Delaunay_Edge;
 	using VertexType = Delaunay_Vector2;
 
-	const int no_points = 50;
+	const int no_points = 100;
 	int lane_idx = threadIdx.x;
 
 	int no_of_points = countof_gpu_voronoi_thresholdpointsforeachedge[lane_idx];
 
 	TriangleType _triangles[(no_points + 2) * 2];
-	EdgeType _edges[(no_points)* 3];
+	EdgeType _edges[(no_points)* 3 * 2];
 	VertexType _vertices[no_points + 3];
 
 	for (int i = 0; i < no_of_points; i++)
@@ -878,9 +878,9 @@ __global__ void delaunayKernel(Line_Segment* d_lines, double2* d_delaunayPoints,
 		{
 			_edges[edge_count] = Delaunay_Edge{ *t.a, *t.b };
 			_edges[edge_count].isActive = true;
-			
-			gpu_delaunay_edgesforeachvoronoi[lane_idx][edge_count*2] = make_double2(t.a->x, t.a->y);
-			gpu_delaunay_edgesforeachvoronoi[lane_idx][edge_count*2 + 1] = make_double2(t.b->x, t.b->y);
+
+			gpu_delaunay_edgesforeachvoronoi[lane_idx][edge_count * 2] = make_double2(t.a->x, t.a->y);
+			gpu_delaunay_edgesforeachvoronoi[lane_idx][edge_count * 2 + 1] = make_double2(t.b->x, t.b->y);
 
 			diff = t.a - _vertices;
 			diff2 = t.b - _vertices;
@@ -891,8 +891,8 @@ __global__ void delaunayKernel(Line_Segment* d_lines, double2* d_delaunayPoints,
 
 			_edges[edge_count] = Delaunay_Edge{ *t.b, *t.c };
 			_edges[edge_count].isActive = true;
-			gpu_delaunay_edgesforeachvoronoi[lane_idx][edge_count*2] = make_double2(t.b->x, t.b->y);
-			gpu_delaunay_edgesforeachvoronoi[lane_idx][edge_count*2 + 1] = make_double2(t.c->x, t.c->y);
+			gpu_delaunay_edgesforeachvoronoi[lane_idx][edge_count * 2] = make_double2(t.b->x, t.b->y);
+			gpu_delaunay_edgesforeachvoronoi[lane_idx][edge_count * 2 + 1] = make_double2(t.c->x, t.c->y);
 
 			diff = t.b - _vertices;
 			diff2 = t.c - _vertices;
@@ -904,8 +904,8 @@ __global__ void delaunayKernel(Line_Segment* d_lines, double2* d_delaunayPoints,
 
 			_edges[edge_count] = Delaunay_Edge{ *t.c, *t.a };
 			_edges[edge_count].isActive = true;
-			gpu_delaunay_edgesforeachvoronoi[lane_idx][edge_count*2] = make_double2(t.c->x, t.c->y);
-			gpu_delaunay_edgesforeachvoronoi[lane_idx][edge_count*2 + 1] = make_double2(t.a->x, t.a->y);
+			gpu_delaunay_edgesforeachvoronoi[lane_idx][edge_count * 2] = make_double2(t.c->x, t.c->y);
+			gpu_delaunay_edgesforeachvoronoi[lane_idx][edge_count * 2 + 1] = make_double2(t.a->x, t.a->y);
 
 			diff = t.c - _vertices;
 			diff2 = t.a - _vertices;
@@ -929,6 +929,516 @@ __global__ void delaunayKernel(Line_Segment* d_lines, double2* d_delaunayPoints,
 	int i = threadIdx.x;
 	Delaunay_Vector2 z1 = Delaunay_Vector2(1.12, 2.34);
 
+	//printf("edge count: %d", edge_count);
+	//printf("debug count:%d", debug_count);
+	//printf("triangle count: %d", triangle_count);
+	//printf(almost_equal(2.11111111111112, 2.11111111111111,10000) ? "true" : "false");
+
+}
+
+__global__ void delaunayKernel(Line_Segment* d_lines, double2* d_delaunayPoints, int* d_no_of_intersections, double2* d_intersections)
+{
+
+	using TriangleType = Delaunay_Triangle;
+	using EdgeType = Delaunay_Edge;
+	using VertexType = Delaunay_Vector2;
+
+	const int no_points = 100;
+	int lane_idx = threadIdx.x;
+
+	int no_of_points = countof_gpu_voronoi_thresholdpointsforeachedge[lane_idx];
+
+	TriangleType _triangles[(no_points + 2) * 2];
+	EdgeType _edges[(no_points)* 3 * 2];
+	VertexType _vertices[no_points + 3];
+
+	for (int i = 0; i < no_of_points; i++)
+	{
+		//_vertices[i] = d[i];
+		_vertices[i].x = gpu_voronoi_thresholdpointsforeachedge[lane_idx][i].x;
+		_vertices[i].y = gpu_voronoi_thresholdpointsforeachedge[lane_idx][i].y;
+	}
+
+	// Determinate the super triangle
+	double minX = _vertices[0].x;
+	double minY = _vertices[0].y;
+	double maxX = minX;
+	double maxY = minY;
+
+	for (int i = 0; i < no_of_points; i++)
+	{
+		VertexType temp = _vertices[i];
+		if (_vertices[i].x < minX) minX = _vertices[i].x;
+		if (_vertices[i].y < minY) minY = _vertices[i].y;
+		if (_vertices[i].x > maxX) maxX = _vertices[i].x;
+		if (_vertices[i].y > maxY) maxY = _vertices[i].y;
+	}
+
+	const double dx = maxX - minX;
+	const double dy = maxY - minY;
+	const double deltaMax = fmax(dx, dy);
+	const double midx = my_half(minX + maxX);
+	const double midy = my_half(minY + maxY);
+
+	const VertexType p1(midx - 2000 * deltaMax, midy - deltaMax);
+	const VertexType p2(midx, midy + 2000 * deltaMax);
+	const VertexType p3(midx + 2000 * deltaMax, midy - deltaMax);
+
+	// Create a list of triangles, and add the supertriangle in it
+	_triangles[0] = TriangleType(p1, p2, p3);
+	_triangles[0].isActive = true;
+	int debug_count = 0;
+	for (int nop = 0; nop < no_of_points; nop++)
+	{
+		VertexType p = _vertices[nop];
+		EdgeType polygon[(no_points + 2) * 4];
+		int polygon_count = 0;
+
+		for (int i = 0; i < sizeof(_triangles) / sizeof(_triangles[0]); i++)
+		{
+			TriangleType t = _triangles[i];
+
+			if (t.isActive)
+			{
+
+				if (t.circumCircleContains(p))
+				{
+					_triangles[i].isBad = true;
+					polygon[polygon_count] = Delaunay_Edge{ *t.a, *t.b };
+					polygon[polygon_count].isActive = true;
+					polygon_count++;
+					polygon[polygon_count] = Delaunay_Edge{ *t.b, *t.c };
+					polygon[polygon_count].isActive = true;
+					polygon_count++;
+					polygon[polygon_count] = Delaunay_Edge{ *t.c, *t.a };
+					polygon[polygon_count].isActive = true;
+					polygon_count++;
+
+
+				}
+			}
+
+		}
+
+		for (int i = 0; i < sizeof(_triangles) / sizeof(_triangles[0]); i++)
+		{
+			// remove triangle if t.isbad = true
+			TriangleType t = _triangles[i];
+			if (t.isActive)
+			{
+				if (t.isBad)
+				{
+					_triangles[i].isActive = false;
+
+				}
+			}
+		}
+
+		for (int i = 0; i < (sizeof(polygon) / sizeof(polygon[0])); i++)
+		{
+			for (int j = i + 1; j < (sizeof(polygon) / sizeof(polygon[0])); j++)
+			{
+				if (polygon[i].isActive && polygon[j].isActive)
+				{
+					if (almost_equal(polygon[i], polygon[j], 2))
+					{
+						polygon[i].isBad = true;
+						polygon[j].isBad = true;
+
+
+					}
+				}
+
+			}
+		}
+
+		for (int i = 0; i < sizeof(polygon) / sizeof(polygon[0]); i++)
+		{
+			// remove edge if e.isbad = true
+			EdgeType e = polygon[i];
+			if (e.isActive)
+			{
+				if (e.isBad)
+				{
+					polygon[i].isActive = false;
+				}
+			}
+
+		}
+
+		for (int i = 0; i < sizeof(polygon) / sizeof(polygon[0]); i++)
+		{
+			EdgeType e = polygon[i];
+			if (e.isActive)
+			{
+
+				bool iterate_bool = true;
+				for (int i = 0; i < sizeof(_triangles) / sizeof(_triangles[0]); i++)
+				{
+
+					TriangleType t = _triangles[i];
+					if (iterate_bool && !(t.isActive))
+					{
+						_triangles[i] = TriangleType(*e.v, *e.w, _vertices[nop]);
+						_triangles[i].isActive = true;
+						iterate_bool = false;
+						debug_count++;
+
+					}
+				}
+			}
+		}
+
+	}
+
+	for (int i = 0; i < sizeof(_triangles) / sizeof(_triangles[0]); i++)
+	{
+		TriangleType t = _triangles[i];
+		if (t.isActive)
+		{
+
+			if (t.containsVertex(p1, 2) || t.containsVertex(p2, 2) || t.containsVertex(p3, 2))
+			{
+
+				_triangles[i].isActive = false;
+
+			}
+
+		}
+		// remove triangle if t.containsVertex(p1) || t.containsVertex(p2) || t.containsVertex(p3);
+	}
+
+
+	int edge_count = 0;
+	int triangle_count = 0;
+	int diff = 0;
+	int diff2 = 0;
+
+	for (int i = 0; i < sizeof(_triangles) / sizeof(_triangles[0]); i++)
+	{
+		TriangleType t = _triangles[i];
+
+		if (t.isActive)
+		{
+			_edges[edge_count] = Delaunay_Edge{ *t.a, *t.b };
+			_edges[edge_count].isActive = true;
+
+			gpu_delaunay_edgesforeachvoronoi[lane_idx][edge_count * 2] = make_double2(t.a->x, t.a->y);
+			gpu_delaunay_edgesforeachvoronoi[lane_idx][edge_count * 2 + 1] = make_double2(t.b->x, t.b->y);
+
+			diff = t.a - _vertices;
+			diff2 = t.b - _vertices;
+
+			gpu_delaunay_edgesindexforeachvoronoi[lane_idx][edge_count * 2] = diff;
+			gpu_delaunay_edgesindexforeachvoronoi[lane_idx][edge_count * 2 + 1] = diff2;
+			edge_count++;
+
+			_edges[edge_count] = Delaunay_Edge{ *t.b, *t.c };
+			_edges[edge_count].isActive = true;
+			gpu_delaunay_edgesforeachvoronoi[lane_idx][edge_count * 2] = make_double2(t.b->x, t.b->y);
+			gpu_delaunay_edgesforeachvoronoi[lane_idx][edge_count * 2 + 1] = make_double2(t.c->x, t.c->y);
+
+			diff = t.b - _vertices;
+			diff2 = t.c - _vertices;
+
+			gpu_delaunay_edgesindexforeachvoronoi[lane_idx][edge_count * 2] = diff;
+			gpu_delaunay_edgesindexforeachvoronoi[lane_idx][edge_count * 2 + 1] = diff2;
+			edge_count++;
+
+
+			_edges[edge_count] = Delaunay_Edge{ *t.c, *t.a };
+			_edges[edge_count].isActive = true;
+			gpu_delaunay_edgesforeachvoronoi[lane_idx][edge_count * 2] = make_double2(t.c->x, t.c->y);
+			gpu_delaunay_edgesforeachvoronoi[lane_idx][edge_count * 2 + 1] = make_double2(t.a->x, t.a->y);
+
+			diff = t.c - _vertices;
+			diff2 = t.a - _vertices;
+
+			gpu_delaunay_edgesindexforeachvoronoi[lane_idx][edge_count * 2] = diff;
+			gpu_delaunay_edgesindexforeachvoronoi[lane_idx][edge_count * 2 + 1] = diff2;
+
+			edge_count++;
+
+
+			triangle_count++;
+
+		}
+
+	}
+	countof_gpu_delaunay_edgesforeachvoronoi[lane_idx] = edge_count;
+
+	NNcrustKernel << < 1, no_of_points >> > (no_of_points, lane_idx, d_lines[lane_idx].P1, d_lines[lane_idx].P2);
+	finalize << < 1, 1 >> >(no_of_points, lane_idx, d_no_of_intersections, d_intersections, d_delaunayPoints);
+
+	int i = threadIdx.x;
+	Delaunay_Vector2 z1 = Delaunay_Vector2(1.12, 2.34);
+
+	//printf("edge count: %d", edge_count);
+	//printf("debug count:%d", debug_count);
+	//printf("triangle count: %d", triangle_count);
+	//printf(almost_equal(2.11111111111112, 2.11111111111111,10000) ? "true" : "false");
+
+}
+
+__global__ void delaunayKernel_dynamic(Line_Segment* d_lines, double2* d_delaunayPoints, int* d_no_of_intersections, double2* d_intersections)
+{
+
+	using TriangleType = Delaunay_Triangle;
+	using EdgeType = Delaunay_Edge;
+	using VertexType = Delaunay_Vector2;
+
+	const int max_no_points = 100;
+	int lane_idx = threadIdx.x;
+
+	int no_of_points = countof_gpu_voronoi_thresholdpointsforeachedge[lane_idx];
+
+	int number_of_triangles = (no_of_points + 2) * 2;
+	int number_of_edges = (no_of_points)* 3 * 2;
+	int number_of_vertices = no_of_points + 3;
+	int number_of_polygons = no_of_points * 4;
+
+	//TriangleType _triangles[(max_no_points) * 2];
+	TriangleType* _triangles = (TriangleType*) malloc(number_of_triangles*sizeof(TriangleType));
+	//EdgeType _edges[(max_no_points)* 3 * 2];
+	EdgeType* _edges = (EdgeType*)malloc(number_of_edges*sizeof(EdgeType));
+
+	VertexType* _vertices = (VertexType*)malloc(number_of_vertices*sizeof(VertexType));
+
+	for (int i = 0; i < no_of_points; i++)
+	{
+		//_vertices[i] = d[i];
+		_vertices[i].x = gpu_voronoi_thresholdpointsforeachedge[lane_idx][i].x;
+		_vertices[i].y = gpu_voronoi_thresholdpointsforeachedge[lane_idx][i].y;
+	}
+
+	// Determinate the super triangle
+	double minX = _vertices[0].x;
+	double minY = _vertices[0].y;
+	double maxX = minX;
+	double maxY = minY;
+
+	for (int i = 0; i < no_of_points; i++)
+	{
+		VertexType temp = _vertices[i];
+		if (_vertices[i].x < minX) minX = _vertices[i].x;
+		if (_vertices[i].y < minY) minY = _vertices[i].y;
+		if (_vertices[i].x > maxX) maxX = _vertices[i].x;
+		if (_vertices[i].y > maxY) maxY = _vertices[i].y;
+	}
+
+	const double dx = maxX - minX;
+	const double dy = maxY - minY;
+	const double deltaMax = fmax(dx, dy);
+	const double midx = my_half(minX + maxX);
+	const double midy = my_half(minY + maxY);
+
+	const VertexType p1(midx - 2000 * deltaMax, midy - deltaMax);
+	const VertexType p2(midx, midy + 2000 * deltaMax);
+	const VertexType p3(midx + 2000 * deltaMax, midy - deltaMax);
+
+	// Create a list of triangles, and add the supertriangle in it
+	_triangles[0] = TriangleType(p1, p2, p3);
+	_triangles[0].isActive = true;
+	int debug_count = 0;
+	for (int nop = 0; nop < no_of_points; nop++)
+	{
+		VertexType p = _vertices[nop];
+		EdgeType polygon[(max_no_points + 2) * 4];
+		int polygon_count = 0;
+
+		for (int i = 0; i < number_of_polygons; i++)
+		{
+			polygon[i].v = NULL;
+			polygon[i].w = NULL;
+			polygon[i].isActive = false;
+			polygon[i].isBad = false;
+		}
+
+		for (int i = 0; i < number_of_triangles; i++)
+		{
+			TriangleType t = _triangles[i];
+
+			if (t.isActive)
+			{
+
+				if (t.circumCircleContains(p))
+				{
+					_triangles[i].isBad = true;
+					polygon[polygon_count] = Delaunay_Edge{ *t.a, *t.b };
+					polygon[polygon_count].isActive = true;
+					polygon_count++;
+					polygon[polygon_count] = Delaunay_Edge{ *t.b, *t.c };
+					polygon[polygon_count].isActive = true;
+					polygon_count++;
+					polygon[polygon_count] = Delaunay_Edge{ *t.c, *t.a };
+					polygon[polygon_count].isActive = true;
+					polygon_count++;
+
+
+				}
+			}
+
+		}
+
+		for (int i = 0; i < number_of_triangles; i++)
+		{
+			// remove triangle if t.isbad = true
+			TriangleType t = _triangles[i];
+			if (t.isActive)
+			{
+				if (t.isBad)
+				{
+					_triangles[i].isActive = false;
+
+				}
+			}
+		}
+
+		for (int i = 0; i < number_of_polygons; i++)
+		{
+			for (int j = i + 1; j < number_of_polygons; j++)
+			{
+				if (polygon[i].isActive && polygon[j].isActive)
+				{
+					if (almost_equal(polygon[i], polygon[j], 2))
+					{
+						polygon[i].isBad = true;
+						polygon[j].isBad = true;
+
+
+					}
+				}
+
+			}
+		}
+
+		for (int i = 0; i < number_of_polygons; i++)
+		{
+			// remove edge if e.isbad = true
+			EdgeType e = polygon[i];
+			if (e.isActive)
+			{
+				if (e.isBad)
+				{
+					polygon[i].isActive = false;
+				}
+			}
+
+		}
+
+		for (int i = 0; i < number_of_polygons; i++)
+		{
+			EdgeType e = polygon[i];
+			if (e.isActive)
+			{
+
+				bool iterate_bool = true;
+				for (int i = 0; i < number_of_triangles; i++)
+				{
+
+					TriangleType t = _triangles[i];
+					if (iterate_bool && !(t.isActive))
+					{
+						_triangles[i] = TriangleType(*e.v, *e.w, _vertices[nop]);
+						_triangles[i].isActive = true;
+						iterate_bool = false;
+						debug_count++;
+
+					}
+				}
+			}
+		}
+
+	}
+
+	for (int i = 0; i < number_of_triangles; i++)
+	{
+		TriangleType t = _triangles[i];
+		if (t.isActive)
+		{
+
+			if (t.containsVertex(p1, 2) || t.containsVertex(p2, 2) || t.containsVertex(p3, 2))
+			{
+
+				_triangles[i].isActive = false;
+
+			}
+
+		}
+		// remove triangle if t.containsVertex(p1) || t.containsVertex(p2) || t.containsVertex(p3);
+	}
+
+
+	int edge_count = 0;
+	int triangle_count = 0;
+	int diff = 0;
+	int diff2 = 0;
+
+	for (int i = 0; i < number_of_triangles; i++)
+	{
+		TriangleType t = _triangles[i];
+
+		if (t.isActive)
+		{
+			_edges[edge_count] = Delaunay_Edge{ *t.a, *t.b };
+			_edges[edge_count].isActive = true;
+
+			gpu_delaunay_edgesforeachvoronoi[lane_idx][edge_count * 2] = make_double2(t.a->x, t.a->y);
+			gpu_delaunay_edgesforeachvoronoi[lane_idx][edge_count * 2 + 1] = make_double2(t.b->x, t.b->y);
+
+			diff = t.a - _vertices;
+			diff2 = t.b - _vertices;
+
+			gpu_delaunay_edgesindexforeachvoronoi[lane_idx][edge_count * 2] = diff;
+			gpu_delaunay_edgesindexforeachvoronoi[lane_idx][edge_count * 2 + 1] = diff2;
+			edge_count++;
+
+			_edges[edge_count] = Delaunay_Edge{ *t.b, *t.c };
+			_edges[edge_count].isActive = true;
+			gpu_delaunay_edgesforeachvoronoi[lane_idx][edge_count * 2] = make_double2(t.b->x, t.b->y);
+			gpu_delaunay_edgesforeachvoronoi[lane_idx][edge_count * 2 + 1] = make_double2(t.c->x, t.c->y);
+
+			diff = t.b - _vertices;
+			diff2 = t.c - _vertices;
+
+			gpu_delaunay_edgesindexforeachvoronoi[lane_idx][edge_count * 2] = diff;
+			gpu_delaunay_edgesindexforeachvoronoi[lane_idx][edge_count * 2 + 1] = diff2;
+			edge_count++;
+
+
+			_edges[edge_count] = Delaunay_Edge{ *t.c, *t.a };
+			_edges[edge_count].isActive = true;
+			gpu_delaunay_edgesforeachvoronoi[lane_idx][edge_count * 2] = make_double2(t.c->x, t.c->y);
+			gpu_delaunay_edgesforeachvoronoi[lane_idx][edge_count * 2 + 1] = make_double2(t.a->x, t.a->y);
+
+			diff = t.c - _vertices;
+			diff2 = t.a - _vertices;
+
+			gpu_delaunay_edgesindexforeachvoronoi[lane_idx][edge_count * 2] = diff;
+			gpu_delaunay_edgesindexforeachvoronoi[lane_idx][edge_count * 2 + 1] = diff2;
+
+			edge_count++;
+
+
+			triangle_count++;
+
+		}
+
+	}
+	countof_gpu_delaunay_edgesforeachvoronoi[lane_idx] = edge_count;
+	free(_triangles);
+	free(_edges);
+	free(_vertices);
+
+	NNcrustKernel << < 1, no_of_points >> > (no_of_points, lane_idx, d_lines[lane_idx].P1, d_lines[lane_idx].P2);
+
+	finalize << < 1, 1 >> >(no_of_points, lane_idx, d_no_of_intersections, d_intersections, d_delaunayPoints);
+
+
+	int i = threadIdx.x;
+	Delaunay_Vector2 z1 = Delaunay_Vector2(1.12, 2.34);
+
+	
 	//printf("edge count: %d", edge_count);
 	//printf("debug count:%d", debug_count);
 	//printf("triangle count: %d", triangle_count);
